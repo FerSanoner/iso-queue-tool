@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ISO Interconnection Queue — Unified Table</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;font-size:12px;background:#f1f5f9;color:#0f172a;padding:16px}
+h1{font-size:16px;font-weight:700;margin-bottom:3px}
+.sub{font-size:11px;color:#64748b;margin-bottom:14px}
+.drop{border:2px dashed #cbd5e1;border-radius:10px;padding:26px 20px;text-align:center;cursor:pointer;background:#fff;transition:all .15s;margin-bottom:10px}
+.drop:hover,.drop.over{background:#eff6ff;border-color:#6366f1}
+.drop strong{font-size:13px}
+.drop span{font-size:11px;color:#94a3b8;display:block;margin-top:4px}
+.log{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:#475569;display:none}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;text-align:center;min-width:80px;cursor:pointer}
+.stat .n{font-size:18px;font-weight:700}
+.stat .l{font-size:10px;color:#64748b;margin-top:1px}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;display:none}
+input[type=text]{padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;width:220px;outline:none}
+select{padding:5px 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;background:#fff;color:#0f172a;outline:none}
+.btn-clear{padding:5px 10px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer;font-size:11px}
+.rcount{font-size:10px;color:#94a3b8;margin-left:auto}
+.wrap{overflow-x:auto;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:none}
+table{border-collapse:collapse;width:100%;background:#fff}
+thead tr{background:#0f172a}
+th{padding:8px 10px;text-align:left;font-size:10px;font-weight:600;color:#94a3b8;white-space:nowrap;cursor:pointer;user-select:none}
+th:hover,th.sorted{color:#c7d2fe}
+td{padding:6px 10px;font-size:11px;border-bottom:1px solid #f1f5f9;white-space:nowrap;max-width:180px;overflow:hidden;text-overflow:ellipsis}
+tr:nth-child(even) td{background:#f8fafc}
+tr:hover td{background:#eff6ff!important}
+.badge{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600}
+.fuel-badge{background:#f0fdf4;color:#15803d;padding:2px 7px;border-radius:4px;font-size:10px}
+.mw{text-align:right;font-weight:600}
+.empty{text-align:center;padding:40px;color:#94a3b8;font-size:13px}
+.pag{display:flex;justify-content:center;gap:5px;margin-top:12px;flex-wrap:wrap;align-items:center}
+.pag button{padding:4px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:11px;color:#475569}
+.pag button.active{background:#6366f1;border-color:#6366f1;color:#fff;font-weight:700}
+.pag button:disabled{opacity:.4;cursor:default}
+.pag .info{font-size:10px;color:#94a3b8}
+</style>
+</head>
+<body>
+
+<h1>ISO Interconnection Queue — Unified Table</h1>
+<p class="sub">Drag and drop the ISO CSVs onto the upload area · Fields are automatically normalized to the 15 standard categories</p>
+
+<div class="drop" id="dz" onclick="document.getElementById('fi').click()"
+  ondragover="event.preventDefault();this.classList.add('over')"
+  ondragleave="this.classList.remove('over')"
+  ondrop="this.classList.remove('over');handleFiles(event.dataTransfer.files);event.preventDefault()">
+  <input type="file" id="fi" multiple accept=".csv" style="display:none" onchange="handleFiles(this.files)">
+  <strong>Drag CSV files here</strong> or click to select
+  <span>MISO · PJM · CAISO · ERCOT · SPP · NYISO · ISO-NE — you can load multiple files at once</span>
+</div>
+
+<div class="log" id="log"></div>
+<div class="stats" id="stats"></div>
+<div class="filters" id="fbar">
+  <input type="text" id="srch" placeholder="🔍 Search project, state, fuel..." oninput="applyFilters()">
+  <select id="fiso" onchange="applyFilters()"><option value="">All ISOs</option></select>
+  <select id="ffuel" onchange="applyFilters()"><option value="">All fuels</option></select>
+  <select id="fstate" onchange="applyFilters()"><option value="">All states</option></select>
+  <select id="fstatus" onchange="applyFilters()"><option value="">All statuses</option></select>
+  <button class="btn-clear" onclick="clearFilters()">✕ Clear filters</button>
+  <span class="rcount" id="rcount"></span>
+</div>
+<div class="wrap" id="wrap">
+  <table>
+    <thead id="thead"></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+<div class="pag" id="pag"></div>
+
+<script>
+const ISO_COLORS={MISO:"#3b82f6",PJM:"#8b5cf6",CAISO:"#f59e0b",ERCOT:"#ef4444",SPP:"#10b981",NYISO:"#06b6d4","ISO-NE":"#f97316"};
+const ISO_BG={MISO:"#dbeafe",PJM:"#ede9fe",CAISO:"#fef3c7",ERCOT:"#fee2e2",SPP:"#d1fae5",NYISO:"#cffafe","ISO-NE":"#ffedd5"};
+
+const MAPS={
+  MISO:{queue_id:"Project #",project_name:"Generating Facility",developer:null,state:"State",county:"County",zone:"Study Group",to:"Transmission Owner",poi:"POI Name",summer_mw:"Summer MW",winter_mw:"Winter MW",fuel:"Fuel",service_type:"Service Type",queue_date:"Queue Date",cod:"Negotiated In Service Date",withdrawn_date:"Withdrawn Date",status:"Request Status"},
+  PJM:{queue_id:"Project ID",project_name:"Name",developer:"Developer",state:"State",county:"County",zone:null,to:"Transmission Owner",poi:null,summer_mw:"MFO",winter_mw:"MW Capacity",fuel:"Fuel",service_type:"Capacity or Energy",queue_date:"Submitted Date",cod:"Requested In-Service Date",withdrawn_date:"Withdrawn Date",status:"Status"},
+  CAISO:{queue_id:"Queue Number",project_name:"Project Name",developer:null,state:"Project State",county:"PROJECT COUNTY",zone:"Study Area",to:"PTO",poi:"POI",summer_mw:"NET MW POI",winter_mw:"NET MW POI",fuel:"Generation/Fuel 1",service_type:"Service Type",queue_date:"Queue Date ",cod:"Requested COD",withdrawn_date:null,status:null},
+  ERCOT:{queue_id:"INR",project_name:"Name",developer:"Developer",state:null,county:"County",zone:"Zone",to:null,poi:"IA Signed",summer_mw:"Capacity (MW)",winter_mw:"Capacity (MW)",fuel:"Fuel",service_type:null,queue_date:null,cod:"Projected COD",withdrawn_date:null,status:"Status"},
+  SPP:{queue_id:"GEN Number",project_name:null,developer:"Interconnection Customer",state:null,county:null,zone:null,to:null,poi:"POI",summer_mw:"MW",winter_mw:"MW",fuel:"Generation Type",service_type:"Service Type",queue_date:null,cod:"COD",withdrawn_date:null,status:"Status"},
+  NYISO:{queue_id:"Queue Pos.",project_name:"Project Name",developer:"Developer/Interconnection Customer",state:"State",county:"County",zone:"Z",to:"Utility",poi:"Points of Interconnection",summer_mw:"SP (MW)",winter_mw:"WP (MW)",fuel:"Type/ Fuel",service_type:null,queue_date:"Date of IR",cod:"Proposed COD",withdrawn_date:null,status:"S"},
+  "ISO-NE":{queue_id:"Position",project_name:"Alternative Name",developer:"Dev",state:"State",county:"County",zone:"Zone",to:"TO Report",poi:"Interconnection Location",summer_mw:"Summer MW",winter_mw:"Winter MW",fuel:"Fuel Type",service_type:"Serv",queue_date:"Requested",cod:"Op Date",withdrawn_date:"W/ D Date",status:"Project Status"}
+};
+
+const COLS=[
+  {k:"iso",l:"ISO",w:75},{k:"queue_id",l:"Queue ID",w:110},{k:"project_name",l:"Proyecto",w:170},
+  {k:"developer",l:"Developer",w:140},{k:"state",l:"Estado",w:60},{k:"county",l:"Condado",w:100},
+  {k:"zone",l:"Zona",w:90},{k:"to",l:"Trans. Owner",w:120},{k:"poi",l:"POI",w:150},
+  {k:"summer_mw",l:"Summer MW",w:85},{k:"winter_mw",l:"Winter MW",w:85},
+  {k:"fuel",l:"Fuel",w:110},{k:"service_type",l:"Serv. Type",w:95},
+  {k:"queue_date",l:"Queue Date",w:95},{k:"cod",l:"COD",w:95},
+  {k:"withdrawn_date",l:"Withdrawn",w:90},{k:"status",l:"Status",w:95}
+];
+
+let ALL=[],filtered=[],sortK="iso",sortD=1,pg=1;
+const PER=50;
+
+function detectISO(fname,hdrs){
+  const f=fname.toLowerCase();
+  if(f.includes("miso"))return"MISO";
+  if(f.includes("pjm"))return"PJM";
+  if(f.includes("caiso")||f.includes("ca15"))return"CAISO";
+  if(f.includes("ercot"))return"ERCOT";
+  if(f.includes("spp"))return"SPP";
+  if(f.includes("nyiso")||(f.includes("ny")&&f.includes("queue")))return"NYISO";
+  if(f.includes("england")||f.includes("iso-ne")||f.includes("isone")||f.includes("new_eng"))return"ISO-NE";
+  if(hdrs.includes("Project #")&&hdrs.includes("POI Name"))return"MISO";
+  if(hdrs.includes("Project ID")&&hdrs.includes("MFO"))return"PJM";
+  if(hdrs.includes("Queue Number")&&hdrs.includes("NET MW POI"))return"CAISO";
+  if(hdrs
