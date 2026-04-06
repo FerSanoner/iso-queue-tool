@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ISO Interconnection Queue — Tabla Unificada</title>
+<title>ISO Interconnection Queue — Unified Table</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,sans-serif;font-size:12px;background:#f1f5f9;color:#0f172a;padding:16px}
@@ -22,6 +22,7 @@ h1{font-size:16px;font-weight:700;margin-bottom:3px}
 input[type=text]{padding:5px 10px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;width:220px;outline:none}
 select{padding:5px 8px;border-radius:6px;border:1px solid #cbd5e1;font-size:11px;background:#fff;color:#0f172a;outline:none}
 .btn-clear{padding:5px 10px;border-radius:6px;border:1px solid #fca5a5;background:#fef2f2;color:#dc2626;cursor:pointer;font-size:11px}
+.btn-dl{padding:5px 10px;border-radius:6px;border:1px solid #86efac;background:#f0fdf4;color:#15803d;cursor:pointer;font-size:11px}
 .rcount{font-size:10px;color:#94a3b8;margin-left:auto}
 .wrap{overflow-x:auto;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.08);display:none}
 table{border-collapse:collapse;width:100%;background:#fff}
@@ -44,27 +45,28 @@ tr:hover td{background:#eff6ff!important}
 </head>
 <body>
 
-<h1>ISO Interconnection Queue — Tabla Unificada</h1>
-<p class="sub">Arrastra los CSVs de cada ISO · Los datos se normalizan automáticamente a las 15 categorías estándar</p>
+<h1>ISO Interconnection Queue — Unified Table</h1>
+<p class="sub">Drag and drop ISO CSV files onto the upload area · Fields are automatically normalized to the 15 standard categories</p>
 
 <div class="drop" id="dz" onclick="document.getElementById('fi').click()"
   ondragover="event.preventDefault();this.classList.add('over')"
   ondragleave="this.classList.remove('over')"
   ondrop="this.classList.remove('over');handleFiles(event.dataTransfer.files);event.preventDefault()">
   <input type="file" id="fi" multiple accept=".csv" style="display:none" onchange="handleFiles(this.files)">
-  <strong>Arrastra los CSVs aquí</strong> o haz clic para seleccionar
-  <span>MISO · PJM · CAISO · ERCOT · SPP · NYISO · ISO-NE — podés cargar varios a la vez</span>
+  <strong>Drag CSV files here</strong> or click to select
+  <span>MISO · PJM · CAISO · ERCOT · SPP · NYISO · ISO-NE — you can load multiple files at once</span>
 </div>
 
 <div class="log" id="log"></div>
 <div class="stats" id="stats"></div>
 <div class="filters" id="fbar">
-  <input type="text" id="srch" placeholder="🔍 Buscar proyecto, estado, fuel..." oninput="applyFilters()">
-  <select id="fiso" onchange="applyFilters()"><option value="">Todos los ISOs</option></select>
-  <select id="ffuel" onchange="applyFilters()"><option value="">Todos los fuels</option></select>
-  <select id="fstate" onchange="applyFilters()"><option value="">Todos los estados</option></select>
-  <select id="fstatus" onchange="applyFilters()"><option value="">Todo status</option></select>
-  <button class="btn-clear" onclick="clearFilters()">✕ Limpiar</button>
+  <input type="text" id="srch" placeholder="🔍 Search project, state, fuel..." oninput="applyFilters()">
+  <select id="fiso" onchange="applyFilters()"><option value="">All ISOs</option></select>
+  <select id="ffuel" onchange="applyFilters()"><option value="">All fuels</option></select>
+  <select id="fstate" onchange="applyFilters()"><option value="">All states</option></select>
+  <select id="fstatus" onchange="applyFilters()"><option value="">All statuses</option></select>
+  <button class="btn-clear" onclick="clearFilters()">✕ Clear filters</button>
+  <button class="btn-dl" onclick="downloadCSV()">⬇ Download CSV</button>
   <span class="rcount" id="rcount"></span>
 </div>
 <div class="wrap" id="wrap">
@@ -90,12 +92,12 @@ const MAPS={
 };
 
 const COLS=[
-  {k:"iso",l:"ISO",w:75},{k:"queue_id",l:"Queue ID",w:110},{k:"project_name",l:"Proyecto",w:170},
-  {k:"developer",l:"Developer",w:140},{k:"state",l:"Estado",w:60},{k:"county",l:"Condado",w:100},
-  {k:"zone",l:"Zona",w:90},{k:"to",l:"Trans. Owner",w:120},{k:"poi",l:"POI",w:150},
+  {k:"iso",l:"ISO",w:75},{k:"queue_id",l:"Queue ID",w:110},{k:"project_name",l:"Project Name",w:170},
+  {k:"developer",l:"Developer",w:140},{k:"state",l:"State",w:60},{k:"county",l:"County",w:100},
+  {k:"zone",l:"Zone",w:90},{k:"to",l:"Trans. Owner",w:120},{k:"poi",l:"POI",w:150},
   {k:"summer_mw",l:"Summer MW",w:85},{k:"winter_mw",l:"Winter MW",w:85},
-  {k:"fuel",l:"Fuel",w:110},{k:"service_type",l:"Serv. Type",w:95},
-  {k:"queue_date",l:"Queue Date",w:95},{k:"cod",l:"COD",w:95},
+  {k:"fuel",l:"Fuel",w:110},{k:"service_type",l:"Service Type",w:95},
+  {k:"queue_date",l:"Queue Date",w:95},{k:"cod",l:"Prop. COD",w:95},
   {k:"withdrawn_date",l:"Withdrawn",w:90},{k:"status",l:"Status",w:95}
 ];
 
@@ -114,4 +116,212 @@ function detectISO(fname,hdrs){
   if(hdrs.includes("Project #")&&hdrs.includes("POI Name"))return"MISO";
   if(hdrs.includes("Project ID")&&hdrs.includes("MFO"))return"PJM";
   if(hdrs.includes("Queue Number")&&hdrs.includes("NET MW POI"))return"CAISO";
-  if(hdrs
+  if(hdrs.includes("INR")&&hdrs.includes("Funnel Stage"))return"ERCOT";
+  if(hdrs.includes("GEN Number")&&hdrs.includes("Interconnection Customer"))return"SPP";
+  if(hdrs.includes("Queue Pos."))return"NYISO";
+  if(hdrs.includes("Position")&&hdrs.includes("Alternative Name"))return"ISO-NE";
+  return null;
+}
+
+function parseCSV(text){
+  const lines=text.split(/\r?\n/);
+  let hi=-1;
+  for(let i=0;i<Math.min(10,lines.length);i++){if(lines[i].trim().length>10){hi=i;break;}}
+  if(hi===-1)return null;
+  const sep=lines[hi].includes("\t")?"\t":",";
+  const split=line=>{
+    const res=[];let cur="";let inQ=false;
+    for(let c of line){
+      if(c==='"'){inQ=!inQ;}
+      else if(c===sep&&!inQ){res.push(cur.trim());cur="";}
+      else{cur+=c;}
+    }
+    res.push(cur.trim());
+    return res;
+  };
+  const headers=split(lines[hi]).map(h=>h.replace(/^"|"$/g,"").trim());
+  const rows=[];
+  for(let i=hi+1;i<lines.length;i++){
+    const line=lines[i].trim();
+    if(!line)continue;
+    const vals=split(line);
+    if(vals.length<2)continue;
+    const obj={};
+    headers.forEach((h,j)=>{obj[h]=(vals[j]||"").replace(/^"|"$/g,"").trim();});
+    rows.push(obj);
+  }
+  return{headers,rows};
+}
+
+function mapRow(raw,iso){
+  const m=MAPS[iso];if(!m)return null;
+  const r={iso};
+  Object.keys(m).forEach(cat=>{const field=m[cat];r[cat]=field?(raw[field]||""):"";});
+  return r;
+}
+
+function handleFiles(files){
+  const log=document.getElementById("log");
+  log.style.display="block";
+  Array.from(files).forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const parsed=parseCSV(e.target.result);
+      if(!parsed){log.innerHTML+=`<div>⚠ ${file.name}: could not be read</div>`;return;}
+      const iso=detectISO(file.name,parsed.headers);
+      if(!iso){log.innerHTML+=`<div>⚠ ${file.name}: ISO not recognized (headers: ${parsed.headers.slice(0,4).join(", ")})</div>`;return;}
+      ALL=ALL.filter(r=>r.iso!==iso);
+      parsed.rows.forEach(raw=>{const mapped=mapRow(raw,iso);if(mapped)ALL.push(mapped);});
+      log.innerHTML+=`<div>✓ ${file.name} → ${iso}: ${ALL.filter(r=>r.iso===iso).length.toLocaleString()} projects loaded</div>`;
+      buildUI();
+    };
+    reader.readAsText(file,"utf-8");
+  });
+}
+
+function buildUI(){
+  buildStats();
+  buildSelects();
+  document.getElementById("fbar").style.display="flex";
+  document.getElementById("wrap").style.display="block";
+  buildHeader();
+  applyFilters();
+}
+
+function buildStats(){
+  const isos=[...new Set(ALL.map(r=>r.iso))];
+  const el=document.getElementById("stats");
+  const total=ALL.length;
+  const totalMW=ALL.reduce((s,r)=>s+(parseFloat(r.summer_mw)||0),0);
+  el.innerHTML=`
+    <div class="stat"><div class="n" style="color:#6366f1">${total.toLocaleString()}</div><div class="l">Total Projects</div></div>
+    <div class="stat"><div class="n" style="color:#16a34a">${(totalMW/1000).toFixed(1)} GW</div><div class="l">Summer MW</div></div>
+    ${isos.map(iso=>`<div class="stat" style="border-color:${ISO_COLORS[iso]||'#888'}" onclick="filterByISO('${iso}')">
+      <div class="n" style="color:${ISO_COLORS[iso]||'#333'}">${ALL.filter(r=>r.iso===iso).length.toLocaleString()}</div>
+      <div class="l">${iso}</div></div>`).join("")}`;
+}
+
+function filterByISO(iso){
+  document.getElementById("fiso").value=iso;
+  applyFilters();
+}
+
+function buildSelects(){
+  const set=(id,vals,placeholder)=>{
+    const el=document.getElementById(id);
+    const cur=el.value;
+    while(el.options.length>1)el.remove(1);
+    vals.forEach(v=>{const o=document.createElement("option");o.value=v;o.text=v;el.add(o);});
+    if(vals.includes(cur))el.value=cur;
+  };
+  set("fiso",[...new Set(ALL.map(r=>r.iso))].sort());
+  set("ffuel",[...new Set(ALL.map(r=>r.fuel).filter(Boolean))].sort());
+  set("fstate",[...new Set(ALL.map(r=>r.state).filter(Boolean))].sort());
+  set("fstatus",[...new Set(ALL.map(r=>r.status).filter(Boolean))].sort());
+}
+
+function applyFilters(){
+  const s=document.getElementById("srch").value.toLowerCase();
+  const iso=document.getElementById("fiso").value;
+  const fuel=document.getElementById("ffuel").value;
+  const state=document.getElementById("fstate").value;
+  const status=document.getElementById("fstatus").value;
+  filtered=ALL.filter(r=>{
+    if(iso&&r.iso!==iso)return false;
+    if(fuel&&r.fuel!==fuel)return false;
+    if(state&&r.state!==state)return false;
+    if(status&&r.status!==status)return false;
+    if(s&&!Object.values(r).some(v=>String(v).toLowerCase().includes(s)))return false;
+    return true;
+  });
+  filtered.sort((a,b)=>{
+    const av=a[sortK]||"",bv=b[sortK]||"";
+    const an=parseFloat(av),bn=parseFloat(bv);
+    if(!isNaN(an)&&!isNaN(bn)&&av!==""&&bv!=="")return sortD*(an-bn);
+    return sortD*String(av).localeCompare(String(bv));
+  });
+  pg=1;
+  document.getElementById("rcount").textContent=`${filtered.length.toLocaleString()} results`;
+  renderTable();
+  renderPag();
+}
+
+function buildHeader(){
+  const tr=document.createElement("tr");
+  COLS.forEach(c=>{
+    const th=document.createElement("th");
+    th.textContent=c.l+(sortK===c.k?(sortD===1?" ↑":" ↓"):"");
+    th.style.minWidth=c.w+"px";
+    if(sortK===c.k)th.classList.add("sorted");
+    th.onclick=()=>{
+      if(sortK===c.k)sortD*=-1;else{sortK=c.k;sortD=1;}
+      buildHeader();applyFilters();
+    };
+    tr.appendChild(th);
+  });
+  document.getElementById("thead").innerHTML="";
+  document.getElementById("thead").appendChild(tr);
+}
+
+function renderTable(){
+  const slice=filtered.slice((pg-1)*PER,pg*PER);
+  const tb=document.getElementById("tbody");
+  if(!slice.length){tb.innerHTML=`<tr><td colspan="${COLS.length}" class="empty">No results found</td></tr>`;return;}
+  tb.innerHTML=slice.map((r,i)=>`<tr>${COLS.map(c=>{
+    const v=r[c.k]||"—";
+    if(c.k==="iso")return`<td><span class="badge" style="background:${ISO_BG[v]||'#f1f5f9'};color:${ISO_COLORS[v]||'#333'}">${v}</span></td>`;
+    if(c.k==="fuel"&&v!=="—")return`<td><span class="fuel-badge">${v}</span></td>`;
+    if(c.k==="summer_mw"||c.k==="winter_mw")return`<td style="text-align:right;font-weight:600">${v}</td>`;
+    return`<td title="${v}">${v}</td>`;
+  }).join("")}</tr>`).join("");
+}
+
+function renderPag(){
+  const pages=Math.max(1,Math.ceil(filtered.length/PER));
+  const el=document.getElementById("pag");
+  if(pages<=1){el.innerHTML="";return;}
+  let html=`<button onclick="goPage(1)" ${pg===1?"disabled":""}>«</button>
+    <button onclick="goPage(${pg-1})" ${pg===1?"disabled":""}>‹</button>`;
+  const start=Math.max(1,Math.min(pg-2,pages-4));
+  const end=Math.min(pages,start+4);
+  for(let i=start;i<=end;i++)
+    html+=`<button onclick="goPage(${i})" class="${i===pg?"active":""}">${i}</button>`;
+  html+=`<button onclick="goPage(${pg+1})" ${pg===pages?"disabled":""}>›</button>
+    <button onclick="goPage(${pages})" ${pg===pages?"disabled":""}>»</button>
+    <span class="info">Page ${pg} of ${pages}</span>`;
+  el.innerHTML=html;
+}
+
+function goPage(p){pg=p;renderTable();renderPag();window.scrollTo(0,0);}
+
+function clearFilters(){
+  document.getElementById("srch").value="";
+  document.getElementById("fiso").value="";
+  document.getElementById("ffuel").value="";
+  document.getElementById("fstate").value="";
+  document.getElementById("fstatus").value="";
+  applyFilters();
+}
+
+function downloadCSV(){
+  if(!filtered.length){alert("No data to download.");return;}
+  const headers=COLS.map(c=>c.l);
+  const keys=COLS.map(c=>c.k);
+  const rows=[headers.join(",")];
+  filtered.forEach(r=>{
+    const vals=keys.map(k=>{
+      const v=r[k]||"";
+      return v.includes(",")||v.includes('"')?`"${v.replace(/"/g,'""')}"`:v;
+    });
+    rows.push(vals.join(","));
+  });
+  const blob=new Blob([rows.join("\n")],{type:"text/csv;charset=utf-8;"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");
+  a.href=url;a.download="iso_queue_unified.csv";
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
