@@ -44,7 +44,7 @@ tr:hover td{background:#eff6ff!important}
 <body>
 
 <h1>ISO Interconnection Queue — Unified Table</h1>
-<p class="sub">Drag and drop ISO CSV or Excel files onto the upload area · Fields are automatically normalized to the 15 standard categories</p>
+<p class="sub">Drag and drop ISO CSV or Excel files · Fields are automatically normalized to the 15 standard categories</p>
 
 <div class="drop" id="dz" onclick="document.getElementById('fi').click()"
   ondragover="event.preventDefault();this.classList.add('over')"
@@ -87,7 +87,7 @@ const MAPS={
   ERCOT:{queue_id:"INR",project_name:"Name",developer:"Developer",state:null,county:"County",zone:"Zone",to:null,poi:"IA Signed",summer_mw:"Capacity (MW)",winter_mw:"Capacity (MW)",fuel:"Fuel",service_type:null,queue_date:null,cod:"Projected COD",withdrawn_date:null,status:"Status"},
   SPP:{queue_id:"GEN Number",project_name:"Project Name",developer:"Interconnection Customer",state:"State",county:"County",zone:"Zone",to:null,poi:"POI",summer_mw:"MW",winter_mw:"MW",fuel:"Generation Type",service_type:"Service Type",queue_date:"Queue Date",cod:"COD",withdrawn_date:"Withdrawal Date",status:"Status"},
   NYISO:{queue_id:"Queue Pos.",project_name:"Project Name",developer:"Developer/Interconnection Customer",state:"State",county:"County",zone:"Z",to:"Utility",poi:"Points of Interconnection",summer_mw:"SP (MW)",winter_mw:"WP (MW)",fuel:"Type/ Fuel",service_type:null,queue_date:"Date of IR",cod:"Proposed COD",withdrawn_date:null,status:"S"},
-  "ISO-NE":{queue_id:"Position",project_name:"Alternative Name",developer:"Dev",state:"State",county:"County",zone:"Zone",to:"TO Report",poi:"Interconnection Location",summer_mw:"Summer MW",winter_mw:"Winter MW",fuel:"Fuel Type",service_type:"Serv",queue_date:"Requested",cod:"Op Date",withdrawn_date:"W/ D Date",status:"Project Status"},
+  "ISO-NE":{queue_id:"Position",project_name:"Alternative Name",developer:"Dev",state:"State",county:"County",zone:"Zone",to:"TO Report",poi:"Interconnection Location",summer_mw:"Summer MW",winter_mw:"Winter MW",fuel:"Fuel Type",service_type:"Serv",queue_date:"Requested",cod:"Op Date",withdrawn_date:"W/ D Date",status:"Project Status"}
 };
 
 const COLS=[
@@ -111,7 +111,7 @@ function detectISO(fname,hdrs){
   if(f.includes("ercot"))return"ERCOT";
   if(f.includes("spp")||f.includes("spiso"))return"SPP";
   if(f.includes("nyiso")||(f.includes("ny")&&f.includes("queue")))return"NYISO";
-  if(f.includes("england")||f.includes("iso-ne")||f.includes("isone")||f.includes("new_eng"))return"ISO-NE";
+  if(f.includes("england")||f.includes("iso-ne")||f.includes("isone")||f.includes("new eng")||f.includes("neweng")||f.includes("ne_iso"))return"ISO-NE";
   if(hdrs.includes("Project #")&&hdrs.includes("POI Name"))return"MISO";
   if(hdrs.includes("Project ID")&&hdrs.includes("MFO"))return"PJM";
   if(hdrs.includes("Queue Number")&&hdrs.includes("NET MW POI"))return"CAISO";
@@ -119,6 +119,7 @@ function detectISO(fname,hdrs){
   if(hdrs.includes("GEN Number")||hdrs.includes("Generation Type")&&hdrs.includes("Interconnection Customer"))return"SPP";
   if(hdrs.includes("Queue Pos."))return"NYISO";
   if(hdrs.includes("Position")&&hdrs.includes("Alternative Name"))return"ISO-NE";
+  if(hdrs.includes("Cluster")&&hdrs.includes("Serv"))return"ISO-NE";
   return null;
 }
 
@@ -135,16 +136,13 @@ function parseCSV(text){
       else if(c===sep&&!inQ){res.push(cur.trim());cur="";}
       else{cur+=c;}
     }
-    res.push(cur.trim());
-    return res;
+    res.push(cur.trim());return res;
   };
   const headers=split(lines[hi]).map(h=>h.replace(/^"|"$/g,"").trim());
   const rows=[];
   for(let i=hi+1;i<lines.length;i++){
-    const line=lines[i].trim();
-    if(!line)continue;
-    const vals=split(line);
-    if(vals.length<2)continue;
+    const line=lines[i].trim();if(!line)continue;
+    const vals=split(line);if(vals.length<2)continue;
     const obj={};
     headers.forEach((h,j)=>{obj[h]=(vals[j]||"").replace(/^"|"$/g,"").trim();});
     rows.push(obj);
@@ -155,7 +153,10 @@ function parseCSV(text){
 function mapRow(raw,iso){
   const m=MAPS[iso];if(!m)return null;
   const r={iso};
-  Object.keys(m).forEach(cat=>{const field=m[cat];r[cat]=field?(raw[field]!==undefined?String(raw[field]):""):"";});
+  Object.keys(m).forEach(cat=>{
+    const field=m[cat];
+    r[cat]=field?(raw[field]!==undefined&&raw[field]!==null?String(raw[field]).trim():""):"";
+  });
   return r;
 }
 
@@ -168,67 +169,68 @@ function processRows(rows,headers,file,iso){
   buildUI();
 }
 
+function readXLSX(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
+        const ws=wb.Sheets[wb.SheetNames[0]];
+        // First try normal json parse
+        const json=XLSX.utils.sheet_to_json(ws,{defval:"",raw:false});
+        if(json.length){
+          const headers=Object.keys(json[0]);
+          resolve({json,headers});return;
+        }
+        // Fallback: raw array mode to find header row
+        const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:false});
+        let headerRow=-1;
+        const keys=["Position","Project #","Queue Pos.","INR","GEN Number","Project ID","Queue Number","Cluster"];
+        for(let i=0;i<Math.min(10,arr.length);i++){
+          const row=arr[i].map(c=>String(c).trim());
+          if(keys.some(k=>row.includes(k))){headerRow=i;break;}
+        }
+        if(headerRow===-1){resolve({json:[],headers:[]});return;}
+        const hdrs=arr[headerRow].map(c=>String(c).trim());
+        const dataRows=arr.slice(headerRow+1)
+          .filter(r=>r.some(c=>c!==""))
+          .map(r=>{const obj={};hdrs.forEach((h,j)=>{obj[h]=String(r[j]||"").trim();});return obj;});
+        resolve({json:dataRows,headers:hdrs});
+      }catch(err){reject(err);}
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 function handleFiles(files){
   const log=document.getElementById("log");
   log.style.display="block";
-  Array.from(files).forEach(file=>{
-    const isXLSX=file.name.toLowerCase().match(/\.xlsx?$/);
-    const reader=new FileReader();
-    if(isXLSX){
-      reader.onload=e=>{
-        try{
-          const wb=XLSX.read(new Uint8Array(e.target.result),{type:"array"});
-          const ws=wb.Sheets[wb.SheetNames[0]];
-          // Try reading with header detection — skip empty leading rows
-          const json=XLSX.utils.sheet_to_json(ws,{defval:"",raw:false});
-          if(!json.length){log.innerHTML+=`<div>⚠ ${file.name}: empty sheet</div>`;return;}
-          // If first row looks like it has no real data, try raw array mode
-          const headers=Object.keys(json[0]);
-          const iso=detectISO(file.name,headers);
-          if(!iso){
-            // Try raw mode to find header row
-            const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:false});
-            let headerRow=-1;
-            for(let i=0;i<Math.min(10,arr.length);i++){
-              const row=arr[i].map(c=>String(c).trim());
-              if(row.includes("Position")||row.includes("Project #")||row.includes("Queue Pos.")||row.includes("INR")||row.includes("GEN Number")||row.includes("Project ID")||row.includes("Queue Number")){
-                headerRow=i;break;
-              }
-            }
-            if(headerRow===-1){log.innerHTML+=`<div>⚠ ${file.name}: ISO not recognized — headers: ${headers.slice(0,5).join(", ")}</div>`;return;}
-            const hdrs=arr[headerRow].map(c=>String(c).trim());
-            const isoDetected=detectISO(file.name,hdrs);
-            if(!isoDetected){log.innerHTML+=`<div>⚠ ${file.name}: ISO not recognized — headers: ${hdrs.slice(0,5).join(", ")}</div>`;return;}
-            const dataRows=arr.slice(headerRow+1).filter(r=>r.some(c=>c!=="")).map(r=>{
-              const obj={};hdrs.forEach((h,j)=>{obj[h]=String(r[j]||"").trim();});return obj;
-            });
-            processRows(dataRows,hdrs,file,isoDetected);
-          } else {
-            processRows(json,headers,file,iso);
-          }
-        }catch(err){log.innerHTML+=`<div>⚠ ${file.name}: error — ${err.message}</div>`;}
-      };
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.onload=e=>{
-        const parsed=parseCSV(e.target.result);
+  Array.from(files).forEach(async file=>{
+    try{
+      const isXLSX=file.name.toLowerCase().match(/\.xlsx?$/);
+      let rows,headers;
+      if(isXLSX){
+        const result=await readXLSX(file);
+        rows=result.json;headers=result.headers;
+      } else {
+        const text=await file.text();
+        const parsed=parseCSV(text);
         if(!parsed){log.innerHTML+=`<div>⚠ ${file.name}: could not be read</div>`;return;}
-        const iso=detectISO(file.name,parsed.headers);
-        if(!iso){log.innerHTML+=`<div>⚠ ${file.name}: ISO not recognized — headers: ${parsed.headers.slice(0,5).join(", ")}</div>`;return;}
-        processRows(parsed.rows,parsed.headers,file,iso);
-      };
-      reader.readAsText(file,"utf-8");
-    }
+        rows=parsed.rows;headers=parsed.headers;
+      }
+      if(!rows.length){log.innerHTML+=`<div>⚠ ${file.name}: no data found</div>`;return;}
+      const iso=detectISO(file.name,headers);
+      if(!iso){log.innerHTML+=`<div>⚠ ${file.name}: ISO not recognized — headers: ${headers.slice(0,5).join(", ")}</div>`;return;}
+      processRows(rows,headers,file,iso);
+    }catch(err){log.innerHTML+=`<div>⚠ ${file.name}: error — ${err.message}</div>`;}
   });
 }
 
 function buildUI(){
-  buildStats();
-  buildSelects();
+  buildStats();buildSelects();
   document.getElementById("fbar").style.display="flex";
   document.getElementById("wrap").style.display="block";
-  buildHeader();
-  applyFilters();
+  buildHeader();applyFilters();
 }
 
 function buildStats(){
@@ -246,8 +248,7 @@ function filterByISO(iso){document.getElementById("fiso").value=iso;applyFilters
 
 function buildSelects(){
   const set=(id,vals)=>{
-    const el=document.getElementById(id);
-    const cur=el.value;
+    const el=document.getElementById(id);const cur=el.value;
     while(el.options.length>1)el.remove(1);
     vals.forEach(v=>{const o=document.createElement("option");o.value=v;o.text=v;el.add(o);});
     if(vals.includes(cur))el.value=cur;
@@ -280,8 +281,7 @@ function applyFilters(){
   });
   pg=1;
   document.getElementById("rcount").textContent=`${filtered.length.toLocaleString()} results`;
-  renderTable();
-  renderPag();
+  renderTable();renderPag();
 }
 
 function buildHeader(){
@@ -330,11 +330,7 @@ function renderPag(){
 function goPage(p){pg=p;renderTable();renderPag();window.scrollTo(0,0);}
 
 function clearFilters(){
-  document.getElementById("srch").value="";
-  document.getElementById("fiso").value="";
-  document.getElementById("ffuel").value="";
-  document.getElementById("fstate").value="";
-  document.getElementById("fstatus").value="";
+  ["srch","fiso","ffuel","fstate","fstatus"].forEach(id=>{document.getElementById(id).value="";});
   applyFilters();
 }
 
